@@ -1,0 +1,88 @@
+function onOpen() {
+  DocumentApp.getUi()
+    .createMenu('Resume Helper')
+    .addItem('Replace Selected Bullet…', 'replaceBulletAtCursor')
+    .addToUi();
+}
+
+function replaceBulletAtCursor(){
+  var ui = DocumentApp.getUi();
+  var cursor = DocumentApp.getActiveDocument().getCursor();
+
+  if(!cursor){
+    ui.alert("No cursor found.");
+    return; 
+  }
+
+  var el = cursor.getElement();
+
+  while(el && el.getType() !== DocumentApp.ElementType.LIST_ITEM){
+    el = el.getParent();
+  } 
+  
+  if(!el){
+    ui.alert("Cursor is not inside a bullet point.");
+    return; 
+  }
+
+  var li = el.asListItem();
+  var oldText = li.getText();
+
+  var resp = ui.prompt('Replace bullet', 'Old:\n   • ' + oldText + '\n\nEnter new bullet text:', ui.ButtonSet.OK_CANCEL);
+  if(resp.getSelectedButton() !== ui.Button.OK){
+    return;
+  } 
+
+  var raw = resp.getResponseText();
+  var cleaned = cleanBulletText(raw);
+
+  var textElem = li.editAsText();
+  textElem.setText("");        // clear
+  textElem.setText(cleaned);   // insert sanitized text
+}
+
+/** Clean a candidate bullet to plain, single-line text */
+function cleanBulletText(input) {
+  var s = String(input || "");
+
+  // (A) remove HTML tags
+  s = s.replace(/<[^>]*>/g, " ");
+
+  // (B) decode a few common HTML entities (quick pass)
+  s = s.replace(/&nbsp;/g, " ")
+       .replace(/&amp;/g, "&")
+       .replace(/&lt;/g, "<")
+       .replace(/&gt;/g, ">")
+       .replace(/&#39;|&apos;/g, "'")
+       .replace(/&quot;/g, '"');
+
+  // (C) trim surrounding quotes if present (smart + straight)
+  s = s.replace(/^\s*["'“”‘’]+/, "").replace(/["'“”‘’]+\s*$/, "");
+
+  // (D) strip leading bullet markers or dashes
+  //    (•, –, —, ·, *, -, etc.)
+  s = s.replace(/^\s*[•\u2022\u2023\u25E6\u2043\-–—\*·]+\s+/, "");
+
+  // (E) convert smart quotes/dashes to ASCII equivalents
+  s = s.replace(/[“”]/g, '"')
+       .replace(/[‘’]/g, "'")
+       .replace(/[–—]/g, "-");
+
+  // (F) remove emojis & pictographs (common ranges)
+  // note: Apps Script supports the 'u' flag
+  s = s.replace(/[\u{1F300}-\u{1FAFF}\u{1F1E6}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, "");
+
+  // (G) remove control chars, keep printable basic punctuation
+  s = s.replace(/[\u0000-\u001F\u007F]/g, " ");
+
+  // (H) collapse newlines/tabs/multiple spaces → single space
+  s = s.replace(/\s*\n+\s*/g, " ").replace(/\s+/g, " ").trim();
+
+  // replace all quotes
+  s = s.replace(/["']/g, "");
+
+ 
+
+  return s;
+}
+
